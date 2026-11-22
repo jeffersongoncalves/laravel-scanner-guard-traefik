@@ -6,13 +6,12 @@ namespace JeffersonGoncalves\ScannerGuardTraefik\Commands;
 
 use Illuminate\Console\Command;
 use JeffersonGoncalves\ScannerGuard\ScannerGuard;
-use JeffersonGoncalves\ScannerGuardTraefik\TraefikConfig;
+use JeffersonGoncalves\ScannerGuardTraefik\TraefikFileSink;
+use Throwable;
 
 /**
- * Writes the dynamic configuration for Traefik's file provider. Unlike the
- * HTTP provider, the file outlives the app: if the app is down (or the
- * denylist can't be read) the file is left untouched and Traefik keeps
- * serving the last list, so the routers using the middleware stay up.
+ * Runs TraefikFileSink once: for the first write at boot, or by hand.
+ * With the sink in scanner-guard.sinks, bans update the file on their own.
  */
 class WriteTraefikConfigCommand extends Command
 {
@@ -22,33 +21,17 @@ class WriteTraefikConfigCommand extends Command
 
     public function handle(ScannerGuard $scannerGuard): int
     {
-        $path = (string) ($this->argument('path') ?? config('scanner-guard-traefik.file'));
+        $path = $this->argument('path');
 
-        if ($path === '') {
-            $this->error('No path given: pass one or set SCANNER_GUARD_TRAEFIK_FILE.');
-
-            return self::FAILURE;
-        }
-
-        // JSON is valid YAML, so a .yml file holding it loads in Traefik.
-        $contents = json_encode(TraefikConfig::build($scannerGuard), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
-
-        // Unchanged: skip the write so Traefik doesn't reload every run.
-        if (is_file($path) && file_get_contents($path) === $contents) {
-            return self::SUCCESS;
-        }
-
-        // Temp file + rename, so Traefik never reads a half-written file.
-        // Traefik's directory watch ignores the .tmp extension.
-        $tmp = $path.'.tmp';
-
-        if (file_put_contents($tmp, $contents) === false || ! rename($tmp, $path)) {
-            $this->error("Could not write {$path}.");
+        try {
+            (new TraefikFileSink(is_string($path) ? $path : null))->sync($scannerGuard->denylistEntries());
+        } catch (Throwable $e) {
+            $this->error($e->getMessage());
 
             return self::FAILURE;
         }
 
-        $this->info("Wrote {$path}.");
+        $this->info('Traefik file is up to date.');
 
         return self::SUCCESS;
     }

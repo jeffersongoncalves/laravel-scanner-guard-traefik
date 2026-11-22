@@ -4,22 +4,21 @@ declare(strict_types=1);
 
 namespace JeffersonGoncalves\ScannerGuardTraefik;
 
-use JeffersonGoncalves\ScannerGuard\ScannerGuard;
-
 /**
  * Traefik dynamic configuration holding one deny-IP plugin middleware with
- * the current denylist. Entries come from ScannerGuard::denylistEntries(),
- * already validated, since one bad entry (or an empty list) would stop the
- * plugin, and every router using it, from loading.
+ * the given denylist. Entries come from scanner-guard already validated,
+ * since one bad entry (or an empty list) would stop the plugin, and every
+ * router using it, from loading.
  */
 class TraefikConfig
 {
     /**
+     * @param  list<array{ip: string, reason: string, expires_at: string|null}>  $entries
      * @return array{http: array{middlewares: array<string, array{plugin: array<string, array<string, list<string>>>}>}}
      */
-    public static function build(ScannerGuard $scannerGuard): array
+    public static function fromEntries(array $entries): array
     {
-        $ips = array_column($scannerGuard->denylistEntries(), 'ip');
+        $ips = array_column($entries, 'ip');
 
         return [
             'http' => [

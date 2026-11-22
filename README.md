@@ -16,8 +16,9 @@ as a deny-IP middleware, so Traefik rejects banned scanners before they reach an
 One app's bans can protect every router that uses the middleware.
 
 Traefik has no built-in IP *deny* middleware (only `ipAllowList`), so this uses the
-[denyip](https://plugins.traefik.io/plugins/62947363ffc0cd18356a97d1/deny-ip-plugin) plugin. Traefik
-pulls the list: nothing is pushed, so there is no sink to add to `scanner-guard.sinks`.
+[denyip](https://plugins.traefik.io/plugins/62947363ffc0cd18356a97d1/deny-ip-plugin) plugin. The
+list reaches Traefik as a file (`TraefikFileSink`, recommended) or through an HTTP endpoint that
+Traefik polls.
 
 ## Installation
 
@@ -50,13 +51,28 @@ When the app is down the file stays where it is, so Traefik keeps the last list.
 SCANNER_GUARD_TRAEFIK_FILE=/traefik-dynamic/scanner-guard.yml
 ```
 
+Register the sink in the app's `config/scanner-guard.php`:
+
 ```php
-// routes/console.php
-Schedule::command('scanner-guard:traefik-write')->everyMinute();
+'sinks' => array_filter([
+    env('SCANNER_GUARD_TRAEFIK_FILE') ? \JeffersonGoncalves\ScannerGuardTraefik\TraefikFileSink::class : null,
+]),
 ```
 
-The command rewrites the file only when the list changes. It writes a temp file and renames it, so
-Traefik never reads a half-written file. If the denylist can't be read, the old file is kept.
+Keep the `array_filter`: scanner-guard resolves every entry of `sinks`, so a `null` entry fails.
+
+From then on, every ban, unban and blocklist change queues scanner-guard's denylist sync, which
+rewrites the file within seconds (a queue worker must be running). scanner-guard also schedules the sync
+every minute (the Laravel scheduler must be running), which drops expired bans. To write the file once by hand, for example at boot before
+the first ban:
+
+```bash
+php artisan scanner-guard:traefik-write
+```
+
+The file is rewritten only when the list changes. Each write goes to a temp file that is then
+renamed, so Traefik never reads a half-written file. If a write fails, the old file stays in place,
+and only this sink is marked as failed: other sinks still run.
 
 ```yaml
 # Traefik: mount the directory, not the single file (a rename breaks single-file bind mounts)
@@ -141,7 +157,7 @@ php artisan vendor:publish --tag="laravel-scanner-guard-traefik-config"
 | `enabled` | `SCANNER_GUARD_TRAEFIK_ENABLED` | `false` | registers the route |
 | `path` | `SCANNER_GUARD_TRAEFIK_PATH` | `scanner-guard/traefik` | |
 | `token` | `SCANNER_GUARD_TRAEFIK_TOKEN` | `null` | required; no token = always `403` |
-| `file` | `SCANNER_GUARD_TRAEFIK_FILE` | `null` | default path for `scanner-guard:traefik-write` |
+| `file` | `SCANNER_GUARD_TRAEFIK_FILE` | `null` | file written by `TraefikFileSink` and `scanner-guard:traefik-write` |
 | `middleware` | `SCANNER_GUARD_TRAEFIK_MIDDLEWARE` | `scanner-guard` | referenced as `scanner-guard@file` or `@http` |
 | `plugin` | `SCANNER_GUARD_TRAEFIK_PLUGIN` | `denyip` | key under `experimental.plugins` |
 | `list_key` | `SCANNER_GUARD_TRAEFIK_LIST_KEY` | `ipDenyList` | the plugin's IP list option |
