@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace JeffersonGoncalves\ScannerGuardTraefik;
 
 use Illuminate\Support\Facades\Route;
+use JeffersonGoncalves\ScannerGuardTraefik\Commands\WriteTraefikConfigCommand;
 use JeffersonGoncalves\ScannerGuardTraefik\Http\Controllers\TraefikConfigController;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -15,7 +16,8 @@ class ScannerGuardTraefikServiceProvider extends PackageServiceProvider
     {
         $package
             ->name('laravel-scanner-guard-traefik')
-            ->hasConfigFile('scanner-guard-traefik');
+            ->hasConfigFile('scanner-guard-traefik')
+            ->hasCommand(WriteTraefikConfigCommand::class);
     }
 
     public function packageBooted(): void

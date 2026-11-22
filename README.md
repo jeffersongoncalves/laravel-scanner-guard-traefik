@@ -37,7 +37,44 @@ request sends `Authorization: Bearer <token>`. The response carries raw IPs: kee
 {"http":{"middlewares":{"scanner-guard":{"plugin":{"denyip":{"ipDenyList":["185.177.72.0/24","203.0.113.7"]}}}}}}
 ```
 
-## Traefik setup
+## Traefik setup: file provider (recommended)
+
+With the HTTP provider, Traefik holds the list only in memory. If the app is down, or the token no
+longer matches, the poll fails and Traefik drops `scanner-guard@http`. Every router that uses it then
+stops serving, and a Traefik restart while the app is down starts with no middleware at all.
+
+The file provider avoids that. The app writes the list to a file in a directory shared with Traefik.
+When the app is down the file stays where it is, so Traefik keeps the last list. No token is needed.
+
+```dotenv
+SCANNER_GUARD_TRAEFIK_FILE=/traefik-dynamic/scanner-guard.yml
+```
+
+```php
+// routes/console.php
+Schedule::command('scanner-guard:traefik-write')->everyMinute();
+```
+
+The command rewrites the file only when the list changes. It writes a temp file and renames it, so
+Traefik never reads a half-written file. If the denylist can't be read, the old file is kept.
+
+```yaml
+# Traefik: mount the directory, not the single file (a rename breaks single-file bind mounts)
+command:
+  - "--experimental.plugins.denyip.modulename=github.com/kevtainer/denyip"
+  - "--experimental.plugins.denyip.version=v1.0.0"
+  - "--providers.file.directory=/traefik-dynamic"
+  - "--providers.file.watch=true"
+volumes:
+  - traefik-dynamic:/traefik-dynamic:ro
+# App: the same volume, writable, at the SCANNER_GUARD_TRAEFIK_FILE directory
+```
+
+Traefik allows only one file provider. If you already have one, write into its directory. Then
+attach `scanner-guard@file` to your routers. Before you do, run the command once and check that the
+middleware shows up in the Traefik dashboard.
+
+## Traefik setup: HTTP provider
 
 **Order matters.** A router that references a middleware Traefik can't build stops serving. Finish
 steps 1–2, check the middleware is healthy, and only then attach it (step 3).
@@ -104,7 +141,8 @@ php artisan vendor:publish --tag="laravel-scanner-guard-traefik-config"
 | `enabled` | `SCANNER_GUARD_TRAEFIK_ENABLED` | `false` | registers the route |
 | `path` | `SCANNER_GUARD_TRAEFIK_PATH` | `scanner-guard/traefik` | |
 | `token` | `SCANNER_GUARD_TRAEFIK_TOKEN` | `null` | required; no token = always `403` |
-| `middleware` | `SCANNER_GUARD_TRAEFIK_MIDDLEWARE` | `scanner-guard` | referenced as `scanner-guard@http` |
+| `file` | `SCANNER_GUARD_TRAEFIK_FILE` | `null` | default path for `scanner-guard:traefik-write` |
+| `middleware` | `SCANNER_GUARD_TRAEFIK_MIDDLEWARE` | `scanner-guard` | referenced as `scanner-guard@file` or `@http` |
 | `plugin` | `SCANNER_GUARD_TRAEFIK_PLUGIN` | `denyip` | key under `experimental.plugins` |
 | `list_key` | `SCANNER_GUARD_TRAEFIK_LIST_KEY` | `ipDenyList` | the plugin's IP list option |
 | `placeholder` | | `192.0.2.1` | served when nothing is banned |
