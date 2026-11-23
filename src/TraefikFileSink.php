@@ -33,11 +33,24 @@ class TraefikFileSink implements DenylistSink
             return;
         }
 
-        // Temp file + rename, so Traefik never reads a half-written file.
-        // Traefik's directory watch ignores the .tmp extension.
-        $tmp = $path.'.tmp';
+        // Temp file + rename, so Traefik never reads a half-written file. One
+        // temp file per run (the queued sync and a manual traefik-write can
+        // overlap), in the same directory so the rename stays atomic. It has
+        // no .yml extension, so Traefik's directory watch ignores it.
+        $dir = dirname($path);
+        $tmp = @tempnam($dir, 'scanner-guard-');
 
-        if (@file_put_contents($tmp, $contents) === false || ! @rename($tmp, $path)) {
+        // tempnam() falls back to the system temp dir when $dir isn't usable.
+        if ($tmp === false || realpath(dirname($tmp)) !== realpath($dir)) {
+            if ($tmp !== false) {
+                @unlink($tmp);
+            }
+
+            throw new RuntimeException("Could not write the Traefik file {$path}.");
+        }
+
+        // tempnam() creates 0600; Traefik may read as another user.
+        if (@file_put_contents($tmp, $contents) === false || ! @chmod($tmp, 0644) || ! @rename($tmp, $path)) {
             @unlink($tmp);
 
             throw new RuntimeException("Could not write the Traefik file {$path}.");

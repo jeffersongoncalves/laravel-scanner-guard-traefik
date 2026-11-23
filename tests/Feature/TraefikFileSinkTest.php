@@ -6,12 +6,15 @@ use JeffersonGoncalves\ScannerGuard\ScannerGuard;
 use JeffersonGoncalves\ScannerGuardTraefik\TraefikFileSink;
 
 beforeEach(function () {
-    $this->file = sys_get_temp_dir().'/scanner-guard-traefik-'.uniqid().'.yml';
+    $this->dir = sys_get_temp_dir().'/scanner-guard-traefik-'.uniqid();
+    mkdir($this->dir);
+    $this->file = $this->dir.'/scanner-guard.yml';
     config(['scanner-guard-traefik.file' => $this->file]);
 });
 
 afterEach(function () {
-    @unlink($this->file);
+    array_map('unlink', glob($this->dir.'/*') ?: []);
+    rmdir($this->dir);
 });
 
 function traefikFileIps(string $file): array
@@ -25,9 +28,16 @@ it('writes the file from the entries', function () {
         ['ip' => '203.0.113.7', 'reason' => 'scanner_path', 'expires_at' => null],
     ]);
 
+    // Only the target is left: the run's temp file was renamed onto it.
     expect(traefikFileIps($this->file))->toBe(['185.177.72.0/24', '203.0.113.7'])
-        ->and(is_file($this->file.'.tmp'))->toBeFalse();
+        ->and(array_map('basename', glob($this->dir.'/*') ?: []))->toBe(['scanner-guard.yml']);
 });
+
+it('leaves the file readable by other users', function () {
+    (new TraefikFileSink)->sync([]);
+
+    expect(fileperms($this->file) & 0777)->toBe(0644);
+})->skipOnWindows();
 
 it('writes the placeholder for an empty list', function () {
     (new TraefikFileSink)->sync([]);
