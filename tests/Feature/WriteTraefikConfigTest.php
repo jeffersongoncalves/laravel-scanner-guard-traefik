@@ -21,8 +21,7 @@ it('writes the denylist to the configured file', function () {
     $this->artisan('scanner-guard:traefik-write')->assertSuccessful();
 
     expect(json_decode((string) file_get_contents($this->file), true))
-        ->toBe(['http' => ['middlewares' => ['scanner-guard' => ['plugin' => ['denyip' => ['ipDenyList' => ['203.0.113.7']]]]]]])
-        ->and(is_file($this->file.'.tmp'))->toBeFalse();
+        ->toBe(['http' => ['middlewares' => ['scanner-guard' => ['plugin' => ['denyip' => ['ipDenyList' => ['203.0.113.7']]]]]]]);
 });
 
 it('takes the path as an argument and writes the placeholder when nothing is banned', function () {

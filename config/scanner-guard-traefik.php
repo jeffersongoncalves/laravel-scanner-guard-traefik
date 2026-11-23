@@ -26,10 +26,11 @@ return [
     | File
     |--------------------------------------------------------------------------
     |
-    | Where `php artisan scanner-guard:traefik-write` writes the same
-    | configuration for Traefik's file provider (recommended): the file
-    | survives the app being down, so Traefik keeps the last list instead
-    | of dropping the middleware and every router using it.
+    | Where TraefikFileSink (in scanner-guard.sinks) and
+    | `php artisan scanner-guard:traefik-write` write the same configuration
+    | for Traefik's file provider (recommended): the file survives the app
+    | being down, so Traefik keeps the last list instead of dropping the
+    | middleware and every router using it.
     |
     */
     'file' => env('SCANNER_GUARD_TRAEFIK_FILE'),

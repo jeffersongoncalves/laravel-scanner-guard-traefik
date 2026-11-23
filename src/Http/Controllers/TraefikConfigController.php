@@ -20,6 +20,6 @@ class TraefikConfigController
 
         abort_unless($token !== '' && hash_equals($token, (string) $request->bearerToken()), 403);
 
-        return response()->json(TraefikConfig::build($scannerGuard))->header('Cache-Control', 'no-store');
+        return response()->json(TraefikConfig::fromEntries($scannerGuard->denylistEntries()))->header('Cache-Control', 'no-store');
     }
 }
